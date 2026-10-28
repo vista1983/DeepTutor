@@ -4,15 +4,32 @@ The bearer key grants access to the local administrator's tutoring workspace.
 Only connect it to an owner-private plugin. Never expose it in browser code.
 """
 import hmac
+import hashlib
 import json
 import logging
 import os
+from pathlib import Path
 
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 from jsonschema import ValidationError, validate
 
 LOG = logging.getLogger(__name__)
+
+
+def valid_plugin_signature(token, raw, public_key):
+    """Verify a short-lived, request-bound token signed by the private Site."""
+    import jwt
+    try:
+        claims = jwt.decode(token, public_key, algorithms=["RS256"],
+                            audience="deeptutor-shanghai",
+                            issuer="deeptutor-private-plugin", leeway=5,
+                            options={"require": ["exp", "iat", "sub", "request_sha256"]})
+        return (0 < claims["exp"] - claims["iat"] <= 90
+                and bool(claims["sub"])
+                and hmac.compare_digest(claims["request_sha256"], hashlib.sha256(raw).hexdigest()))
+    except (jwt.PyJWTError, ValueError, TypeError, KeyError):
+        return False
 CAPABILITIES = ["chat", "deep_solve", "deep_question", "deep_research", "ask_questions", "mastery_path"]
 ID = {"type": "string", "minLength": 1, "maxLength": 200}
 
@@ -76,13 +93,18 @@ def install(app, service=None, token_getter=None):
     async def rpc(request: Request):
         expected = token_getter()
         supplied = request.headers.get("authorization", "")
-        if len(expected) < 32 or not hmac.compare_digest(supplied.encode(), ("Bearer " + expected).encode()):
+        bearer_ok = len(expected) >= 32 and hmac.compare_digest(supplied.encode(), ("Bearer " + expected).encode())
+        key_file = Path(os.environ.get("DEEPTUTOR_PLUGIN_PUBLIC_KEY_FILE", "/app/data/plugin-public.pem"))
+        signed_candidate = supplied.startswith("Bearer ") and key_file.is_file()
+        if not bearer_ok and not signed_candidate:
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
         raw = bytearray()
         async for chunk in request.stream():
             raw.extend(chunk)
             if len(raw) > 131072:
                 return JSONResponse({"error": "Request too large"}, status_code=413)
+        if not bearer_ok and not valid_plugin_signature(supplied[7:], bytes(raw), key_file.read_text()):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
         try:
             body = json.loads(raw)
         except (ValueError, UnicodeError):

@@ -1,5 +1,5 @@
 // Server-only Site MCP bridge. Publish as an owner-private Site with capability "mcp".
-// Configure DEEPTUTOR_BASE_URL and DEEPTUTOR_MCP_TOKEN as hosted runtime secrets.
+// Configure DEEPTUTOR_BASE_URL and DEEPTUTOR_SIGNING_PRIVATE_KEY as hosted runtime secrets.
 import tools from './client-tools.json';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
@@ -22,21 +22,38 @@ export default {
     const envelope = {jsonrpc:'2.0',id:body.id ?? null};
     if (body.method === 'server/discover') return json({...envelope,result:{supportedVersions:['2026-07-28'],capabilities:{tools:{}}}});
     if (body.method === 'tools/list') return json({...envelope,result:{tools}});
+    if (body.method === 'initialize') return json({...envelope,result:{protocolVersion:'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'deeptutor-shanghai',version:'1.1.0'}}});
+    if (body.id === undefined) return new Response(null,{status:202});
     if (body.method === 'ping') return json({...envelope,result:{}});
     if (body.method !== 'tools/call') return json({...envelope,error:{code:-32601,message:'Method not found'}});
     if (!request.headers.get('oai-authenticated-user-id')) return json({error:'Authentication required'},401);
     if (!tools.some(t=>t.name===body.params?.name)) return json({...envelope,error:{code:-32602,message:'Unknown tool'}});
     const failure = message => json({...envelope,result:{isError:true,content:[{type:'text',text:message}]}});
-    if (!env.DEEPTUTOR_BASE_URL || !env.DEEPTUTOR_MCP_TOKEN) return failure('DeepTutor 云端连接尚未配置完成，当前不能执行任务。');
+    if (!env.DEEPTUTOR_BASE_URL || !env.DEEPTUTOR_SIGNING_PRIVATE_KEY) return failure('DeepTutor 云端连接尚未配置完成，当前不能执行任务。');
     try {
       const base = new URL(env.DEEPTUTOR_BASE_URL);
       if (base.protocol !== 'https:' || base.username || base.password) return failure('DeepTutor 服务地址配置无效。');
+      const payload = JSON.stringify(body);
+      const token = await signRequest(env.DEEPTUTOR_SIGNING_PRIVATE_KEY, payload, request.headers.get('oai-authenticated-user-id'));
       const upstream = await fetch(new URL('/api/client-mcp',base), {
-        method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${env.DEEPTUTOR_MCP_TOKEN}`},
-        body:JSON.stringify(body), redirect:'error', signal:AbortSignal.timeout(25000),
+        method:'POST', headers:{'content-type':'application/json',authorization:`Bearer ${token}`},
+        body:payload, redirect:'error', signal:AbortSignal.timeout(25000),
       });
       if (!upstream.ok) return failure('DeepTutor 服务暂不可用或连接认证失败，请检查云端服务状态。');
       return json(await upstream.json());
     } catch { return failure('DeepTutor 连接超时或响应异常。请稍后检查任务状态，避免重复提交。'); }
   },
 };
+
+const b64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+async function signRequest(pem, body, subject) {
+  const bytes = Uint8Array.from(atob(pem.replace(/-----[^-]+-----/g,'').replace(/\s/g,'')), c=>c.charCodeAt(0));
+  const key = await crypto.subtle.importKey('pkcs8',bytes,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['sign']);
+  const enc = new TextEncoder();
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256',enc.encode(body)));
+  const request_sha256 = [...digest].map(x=>x.toString(16).padStart(2,'0')).join('');
+  const now = Math.floor(Date.now()/1000);
+  const claims={iss:'deeptutor-private-plugin',aud:'deeptutor-shanghai',sub:subject,iat:now,exp:now+60,request_sha256};
+  const unsigned=b64url(enc.encode(JSON.stringify({alg:'RS256',typ:'JWT'})))+'.'+b64url(enc.encode(JSON.stringify(claims)));
+  return unsigned+'.'+b64url(await crypto.subtle.sign('RSASSA-PKCS1-v1_5',key,enc.encode(unsigned)));
+}
