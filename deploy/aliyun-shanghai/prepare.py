@@ -10,6 +10,7 @@ import secrets
 
 def prepare(root=Path("/opt/deeptutor")):
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    root.chmod(0o700)
     (root / "data").mkdir(mode=0o700, exist_ok=True)
     path = root / ".env"
     try:

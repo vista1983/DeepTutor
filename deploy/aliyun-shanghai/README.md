@@ -9,11 +9,11 @@
 
 通过已认证的 Workbench 终端核对主机、地域及运行服务；检查 `free -h`、
 `df -h`、`docker ps`、`docker stats --no-stream`、`ss -lntp`。
-确认 Docker Compose 可用、3782 未占用，以及官方镜像仓库 ghcr.io 可达。
+确认 Docker 可用、3782 未占用，以及官方镜像仓库 ghcr.io 可达。
 镜像较大，确认实际下载大小和可用磁盘后再构建。
 已有 academic-scholar、浏览器、OAuth、Caddy 等服务必须保留。
 
-Compose 给 DeepTutor 设置 1536 MiB 内存上限；这只是隔离上限，不能保证
+Compose 给 DeepTutor 设置 850 MiB 内存上限；这只是隔离上限，不能保证
 当前 2 GiB 主机能承载全部服务。若余量不足，先报告实测结果，不停用现有
 应用、不自行购买或升级服务器、不自动增加交换空间。
 
@@ -23,8 +23,7 @@ Compose 给 DeepTutor 设置 1536 MiB 内存上限；这只是隔离上限，不
 
 ```sh
 sudo python3 deploy/aliyun-shanghai/prepare.py
-sudo docker compose -f deploy/aliyun-shanghai/compose.yaml build
-sudo docker compose -f deploy/aliyun-shanghai/compose.yaml up -d
+sudo bash deploy/aliyun-shanghai/run.sh
 curl -fsS http://127.0.0.1:3782/api/client-health
 ```
 
