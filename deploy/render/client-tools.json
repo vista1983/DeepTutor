@@ -1,0 +1,138 @@
+[
+  {
+    "name": "deeptutor_status",
+    "description": "Check DeepTutor readiness without exposing provider credentials.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "deeptutor_start",
+    "description": "Start a tutoring, problem-solving, quiz or research task. Returns turn_id immediately; use deeptutor_result to read progress. Model usage may incur provider charges.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 30000
+        },
+        "capability": {
+          "type": "string",
+          "enum": [
+            "chat",
+            "deep_solve",
+            "deep_question",
+            "deep_research",
+            "ask_questions",
+            "mastery_path"
+          ]
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "knowledge_bases": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "deeptutor_result",
+    "description": "Read task status and paginated durable events. Continue with next_seq when has_more is true. If waiting_input, ask the user and call deeptutor_reply.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "turn_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "after_seq": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "turn_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "deeptutor_reply",
+    "description": "Submit the user's answer to a task waiting for input.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "turn_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10000
+        }
+      },
+      "required": [
+        "turn_id",
+        "text"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "deeptutor_cancel",
+    "description": "Cancel a running task without deleting its saved conversation.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "turn_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "turn_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "deeptutor_sessions",
+    "description": "List the owner's recent tutoring conversations.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  }
+]
