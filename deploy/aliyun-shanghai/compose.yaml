@@ -1,0 +1,30 @@
+name: deeptutor-shanghai
+services:
+  deeptutor:
+    build:
+      context: ../..
+      dockerfile: deploy/render/Dockerfile
+    image: deeptutor-shanghai:1.6.15-mcp
+    restart: unless-stopped
+    env_file: /opt/deeptutor/.env
+    environment:
+      TZ: Asia/Shanghai
+      PORT: "10000"
+    ports:
+      - "127.0.0.1:3782:10000"
+    volumes:
+      - /opt/deeptutor/data:/app/data
+    mem_limit: 850m
+    cpus: 1.5
+    pids_limit: 512
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:10000/api/client-health"]
+      start_period: 180s
+      interval: 30s
+      timeout: 10s
+      retries: 5
